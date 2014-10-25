@@ -1,18 +1,160 @@
----
-layout: default
----
-
-<div class="posts">
-  {% for post in site.posts %}
-    <article class="post">    
-      
-      <h1><a href="{{ site.baseurl }}{{ post.url }}">{{ post.title }}</a></h1>
-
-      <div class="entry">
-        {{ post.content | truncatewords:40}}
-      </div>
-      
-      <a href="{{ site.baseurl }}{{ post.url }}" class="read-more">Read More</a>
-    </article>
-  {% endfor %}
-</div>
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>Chess Engine - Big /\ Dumb</title>
+		<style type="text/css">
+		body{
+			margin: 50px;
+			font-size: 18px;
+		}
+		em{
+			font-weight: normal;
+			font-style: normal;
+			font-size: 14px;
+			font-family: monospace;
+			padding: 1px;
+			background: gainsboro;
+		}
+		li{
+			margin-top: 20px;
+		}
+		</style>
+	</head>
+	<body>
+		<h1>Chess Engine - Big /\ Dumb</h1>
+		<p>You might remember that we
+		had planned to dub this "Attack on King". Turns out that a 
+		<a target="_blank" href="https://chessprogramming.wikispaces.com/Atak">very similar name</a> has already been
+		claimed.</p>
+		<p>When I started writing the engine I had nine, free days ahead of me -
+		so I decided to do everything in C - all the datastructures, parsing, etc.
+		The first version (<i>Saphira</i>, from the Inheritance cycle)
+		lasted up to the move generation phase, I couldn't proceed further as I inadvertently
+		introduced teeny-tiny-bugs which I couldn't find in the mess of code.</p>
+		<p>With <i>Saphira</i>, I found that the OO paradigm got in the way more often than not,
+		as are dealing with bitboards most of the time (and not the bits themselves). I had written
+		a bitboard wrapper which had only one member (bword, a bitword) and several member functions like
+		getting or setting a particular bit (which were not used at all). Debugging was carried out through 
+		generating HTML tables with the pieces filled in (Is this even 2014?)</p>
+		<p>So I created another engine with a more robust debugging layer (writing to a log file, handling WinBoard properly from the get-go) and tried out a purely descriptive (i.e. mailbox) representation of the chess board.</p>
+		<p>It worked, but it was so damn slow. Infact, it was so slow that I abandoned it within half a day.</p>
+		<p>With only four days remaining, I made the decision to switch to C++ because
+		STL would help breeze through the tree walking part easily - albeit slower than a good
+		C implementation. At this point, I only wanted to get it to work - play a passable level of chess.
+		The current version is quite simple to extend, has no serious issues and plays chess at the level
+		of a human beginner. If you're lucky, it can even surprise you with forks and discovered checks!</p>
+		<p>Just one request: please avoid en-passant captures and castling manoeuvres - the engine's too dumb to get them. ( for now..? )</p>
+		
+		<h3>One small jump for a pawn...</h3>
+		<p>The only WinBoard features which it can understand - <em>new</em>, <em>force</em>, <em>go</em>,
+		 <em>xboard</em>. It can also
+		inform WinBoard that it doesn't know much else. So, <em>features</em>, too.</p>
+		<p>While testing the engine, I have
+		only made it play as Black (so the human player is White). In my defense, for every Black logic segment added, there is a (mostly copy pasted) White counterpart - which is assumed to work because the Black algorithms recursively call the White ones. Basically, you start WinBoard, make a move, and the engine kicks into life. How does it play? Quite similar to what I've named it.</p>
+		<p>First, when you load up the engine, it precomputes
+		move patterns for certain types of pieces. You will notice that some pieces - such as the
+		queen, rook, bishop - slide along the board and their moves depend on the board configuration
+		at the time. Others like the knight, pawns, king are less dependent on how the board looks.</p>
+		<p>Given a square and a non-sliding piece, we can encode all the places it can move to beforehand. 
+		This data is stored in a 64-bit word (<em>uint64_t</em> in C and a <em>stl::bitset&lt;64&gt;</em> with C++ were the weapons of choice). A particular bit is set if our piece can land on its square from the designated
+		starting square. This is called a <b>"bitboard"</b>(or a bitmap). Essentially,
+		 it allows us to operate faster by framing good predicates for move generation - stuff like
+		  "Which squares are empty?", "Which squares are attacked by atleast one Black piece?". Big /\ Dumb does this for each of 
+		the sixty four squares on the board so we have a database like <em>std::bitset&lt;64&gt; king_moves[64], knight_moves[64]</em> etc.
+		before we even send the "hello" message to WinBoard. If we now require to check where a knight on
+		<em>a7</em> can move to, we just look up <em>knight_moves[8]</em> from our database. A very good
+		 explanation of simple bitboards by the author of the NagaSkaki engine can be found 
+		 <a href="http://www.mayothi.com/nagaskakichess6.html" target="_blank">here</a>.</p>
+		<p>Big /\ Dumb enjoys <b>coordinate notation</b>. All the array subscripts are done as follows: <em>Array[Depth][Width] == Array[y][x]</em>. That means
+		that <em>y=0</em> is the row of Black's major pieces at the start of the game. We do not flip the board
+		at any time, and always store it from the perspective of White. Some functions use a plain index, the
+		 conversion is: <em>Array[Index]=Array[8*y+x]</em></p>
+		<p><em>moves.h</em> describes a very simple move encoding - which should suffice for now.
+		Basically, once we have the program actually playing chess moves, we need structures to store details
+		about the moves made - which side moved, were any captures made, did the move expose a pawn to an
+		<i>en-passant</i> capture the next turn, can white still castle, etc. It is also useful to be able to
+		impose an ordering on any arbitrary list of moves - for instance, we would like to examine moves which
+		lead to capture of enemy pieces before moving onto 'quiet' moves, which may only give positional advantage
+		(or absolutely nothing at all).
+		The <em>bigdumb::ChessMove</em> record does exactly this - and nothing more. The helper functions
+		define the <em>less-than</em> and <em>greater-than</em> comparison operators so we can simply call <em>stl::sort()</em> instead of writing our own sorting functions. (When was the last time we wrote QuickSort anyway?). Depending on the nature of move at hand, the sorting criterion differs - for captures, we try
+		 to capture the most valuable piece with our least valuable one. For quiet moves, we try to play the move
+		 which maximizes the mobility of our pieces. (which is simply the number of 'set' bits in the attack map
+		 of that particular piece).</p>
+		<p>The final header file, <i>`board.h`</i> defines a 'board' class which is essentially the engine itself.
+		It keeps a normal record (2D array of characters) of the chess board, which side gets to move next, all the
+		various bitboards required, etc. and interfaces with WinBoard/the human player. The function <em>move(std::string)</em>
+		will take a coordinate notation move eg: <em>e2e4</em> and make the necessary changes to the internal game
+		state of the board. Further, if the user expects us (the engine) to play the next move, we also call
+		<em>make_engine_move(alpha, beta, depth)</em>. There are 2 variants of the engine right now - a normal NegaMax formulation
+		and the Alpha-Beta formulation. I do not fully understand how the Alpha-Beta pruning works with the negamax framework - so I won't claim I do.
+		However, it works far better than the pure negamax form - so that is the one which has been included.</p>
+		<p>When a move is requested, we start a NegaMax search with Alpha-Beta pruning.
+		For terminal nodes, we just evaluate the advantage for the side which is to play and return it (as an <em>int</em>). Otherwise, we walk the 2D array
+		stored in <em>bigdumb::Board</em> and generate all the moves for the side which is to play (say Black). 
+		While doing this, we also compute the mobility using the squares each particular piece can move to. As soon
+		 as we get all squares for a piece, (say knight), a call is made to <em>add_move_from_bitmap</em>. This
+		 takes as arguments a starting square, and a bitmap of ending squares and adds all the moves to either captures or quiet moves.</p>
+		 <p>Here is the justification for the 'Big' part. For each move in our movelist, we create a copy of the <em>Board</em>. As we are performing DFS, atmost <em>ROOT_DEPTH</em> copies will remain in memory. However, while
+		 examining capture lines, we remove that cap - allowing for potentially infinite copies ! (The highest I've
+		  noticed in actual play is only twelve, though). If we want to make the engine run faster, optimizations could be
+		  made in this area. Anyhow, the processing of a given move depends on whether it leads to
+		   material exchange or not.</p>
+		<p>We start by <em>full_examine</em> on all the captures - we search captures more thoroughly because
+		we don't want to end up performing bad trades. The <em>full_examine</em> calls will ignore any quiet moves
+		in their movelists - the idea is that if you are performing quiet moves in the thick of a tactical exchange playing out, you will end up in bad shape anyway. This seems to be working well so far.</p>
+		<p>After this, we check all the quiet or positional moves we can make, in case that the best capture we can
+			make is something like a knight in return for a pawn. This phase is largely influenced by the PSQ or the Piece Square Table (as the material gain part of evaluation will be nulled) - which encodes how desirable it is to have a kind of piece on the square it
+		is on. Without PSQs, the engine tends to make stupid moves such as placing knights on the rim and cycling between moves in alternate turns (this behaviour can be seen in some of the PGNs linked). The values 
+		for our PSQs are taken from <a href="https://chessprogramming.wikispaces.com/Simplified+evaluation+function" target="_blank">here</a>.</p>
+		<p>As always, the score of each move is inversely proportional to the best reply your opponent can come up
+		 with - the calls recurse until we hit <em>ROOT_DEPTH</em> for quiet moves. Captures can go on indefinitely, until no more aggressive lines arise.
+		 We can maintain track of which variation we are currently examining and print that for debugging (check <em>bigdumb::Board::variation</em>). Once the
+		 entire tree is checked, we send the best move we found to WinBoard. </p>
+		<p>I've given
+		the kings preposterous valuations so their armies don't end up feeding their monarchs to (metaphorical) dogs - however, there <i>are</i> some
+		games where this seems to happen regardless. Adding a <em>is_king_in_check</em> before finalizing a move with a good score
+		should fix it. (and probably slow down the already-quite-slow-move-generator). Oh, and again, the castling rules and
+		en-passant don't quite work (there is a bit of misleading code for them). At this point, they're not bugs. They're features. As a rule of thumb, if you
+		get an 'illegal move' message from WinBoard after you check Big /\ Dumb's king, you win. Good luck.</p>
+		
+		<h1>Installation</h1>
+		<ol>
+		<li>You need the WinBoard program, obviously. The version used for testing was Winboard-4.4.2.
+		 The newer release, <a href="http://hgm.nubati.net/WinBoard-4.4.4.exe" target="_blank">Winboard-4.4.4</a>, seems to work too.</li>
+		<li>Let's say you installed WinBoard to <em>C:\WinBoard-4.4.4</em>. Download <a href="" target="_blank">
+		Big /\ Dumb </a>(<em>.rar</em> with binary and source) and extract to <em>C:\WinBoard-4.4.4\Big^Dumb</em>. So, your WinBoard application
+		 resides at <em>C:\WinBoard-4.4.4\WinBoard\winboard.exe</em> and the engine is at <em>C:\WinBoard-4.4.4\Big^Dumb\bigdumb.exe</em>.</li>
+		<li>Now we need to point WinBoard to our engine. Edit <em>C:\WinBoard-4.4.4\WinBoard\winboard.ini</em> to read like as follows:<br /><br /> 
+		<em>... some lines ... <br />
+			... some lines ... <br />
+			<b>/firstChessProgramNames={"bigdumb" /fd="..\Big^Dumb"</b><br />
+			fruit_21 /fd="../Fruit" /fUCI<br />
+			"polyglot38 _PG/fruit.ini"<br />
+			"Pulsar2009-9b 2" /fd="..\Pulsar"<br />
+			"MaxQi 22" /fd="..\Fairy-Max" /variant=xiangqi<br />
+			"ShaMax 22" /fd="..\Fairy-Max" /variant=shatranj<br />
+			"Smirfoglot /H64" /fd="..\SMIRF"<br />
+			"joker80 20" /fd="../joker" /variant=gothic<br />
+			"jokerKM 20" /fd="../joker" /variant=knightmate<br />
+			}<br />
+			<b>/secondChessProgramNames={"bigdumb" /sd="..\Big^Dumb"</b><br />
+			 .... more lines ....<br />
+			 .... more lines ....<br /></em>
+		</li>
+		<li>Once that is done, you start up <em>winboard.exe</em>. It should already have Big /\ Dumb selected. Choose <em>Play against an engine or match two engines...</em> and you should be golden. Once you're in, I prefer
+		 to increase the time controls (<em>Options -> Time control ... -> 30mins</em>). Click on a white piece, click on a landing square, and we're off!</li>
+		 <li>Big /\ Dumb takes around seven to thirty seconds per move on my system, it should be somewhere in that ballpark for you as well. Increasing the <em>ROOT_DEPTH</em> to <em>5</em> makes it crush me from the opening, wheras I can kind of play around a level of <em>3</em> (so that's the default). Further, once you set the engine thinking, you can see what lines it examined by checking <em>debug.txt</em> in the Big /\ Dumb folder.</li>
+		 <li>A final note:
+		</ol>
+		<h1>Thanks!</h1>
+		<p>My mostly defunct e-mail is <em>furlox.mod@gmail.com</em>. Just find me on Steam if I'm not online.</p>
+		<hr />
+		Furlox<br />
+		(Still not a sign painter)
+		
+		
+		
+	</body>
+	
+</html>
