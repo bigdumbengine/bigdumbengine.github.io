@@ -81,7 +81,7 @@
 		 to capture the most valuable piece with our least valuable one. For quiet moves, we try to play the move
 		 which maximizes the mobility of our pieces. (which is simply the number of 'set' bits in the attack map
 		 of that particular piece).</p>
-		<p>The final header file, <i>`board.h`</i> defines a 'board' class which is essentially the engine itself.
+		<p>The final header file, <em>board.h</em> defines a 'board' class which is essentially the engine itself.
 		It keeps a normal record (2D array of characters) of the chess board, which side gets to move next, all the
 		various bitboards required, etc. and interfaces with WinBoard/the human player. The function <em>move(std::string)</em>
 		will take a coordinate notation move eg: <em>e2e4</em> and make the necessary changes to the internal game
