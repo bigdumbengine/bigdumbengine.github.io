@@ -56,7 +56,7 @@
 		queen, rook, bishop - slide along the board and their moves depend on the board configuration
 		at the time. Others like the knight, pawns, king are less dependent on how the board looks.</p>
 		<p>Given a square and a non-sliding piece, we can encode all the places it can move to beforehand. 
-		This data is stored in a 64-bit word (<em>uint64_t</em> in C and a <em>stl::bitset&lt;64&gt;</em> with C++ were the weapons of choice). A particular bit is set if our piece can land on its square from the designated
+		This data is stored in a 64-bit word (<em>uint64_t</em> in C and a <em>std::bitset&lt;64&gt;</em> with C++ were the weapons of choice). A particular bit is set if our piece can land on its square from the designated
 		starting square. This is called a <b>"bitboard"</b>(or a bitmap). Essentially,
 		 it allows us to operate faster by framing good predicates for move generation - stuff like
 		  "Which squares are empty?", "Which squares are attacked by atleast one Black piece?". Big /\ Dumb does this for each of 
@@ -77,7 +77,7 @@
 		lead to capture of enemy pieces before moving onto 'quiet' moves, which may only give positional advantage
 		(or absolutely nothing at all).
 		The <em>bigdumb::ChessMove</em> record does exactly this - and nothing more. The helper functions
-		define the <em>less-than</em> and <em>greater-than</em> comparison operators so we can simply call <em>stl::sort()</em> instead of writing our own sorting functions. (When was the last time we wrote QuickSort anyway?). Depending on the nature of move at hand, the sorting criterion differs - for captures, we try
+		define the <em>less-than</em> and <em>greater-than</em> comparison operators so we can simply call <em>std::sort()</em> instead of writing our own sorting functions. (When was the last time we wrote QuickSort anyway?). Depending on the nature of move at hand, the sorting criterion differs - for captures, we try
 		 to capture the most valuable piece with our least valuable one. For quiet moves, we try to play the move
 		 which maximizes the mobility of our pieces. (which is simply the number of 'set' bits in the attack map
 		 of that particular piece).</p>
